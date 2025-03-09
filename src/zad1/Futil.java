@@ -4,34 +4,22 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Futil {
-    public static void processDir(String dirName, String resultFileName) {
-        File outputFile = new File(resultFileName);
+    // Variable that allows the output file (if exists) to be truncated ONLY during the first writeToFile method invocation
+    private static boolean existingFileTruncated = false;
 
-        // Create output file if it doesn't exist
-        if (!outputFile.exists()) {
-            try {
-                outputFile.createNewFile();
-            } catch (IOException e) {
-                throw new RuntimeException("There was an error while creating the output file");
-            }
-        } else { // Clear contents of existing file
-            try {
-                new PrintWriter(resultFileName).close();
-            } catch (FileNotFoundException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        FileVisitor<Path> fileVisitor = new FileVisitor<Path>() {
+    public static void processDir(String dirName, String resultFileName) {
+        FileVisitor<Path> fileVisitor = new FileVisitor<>() {
 
             @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                 System.out.println("Entering directory: " + dir);
                 return FileVisitResult.CONTINUE;
             }
@@ -40,34 +28,20 @@ public class Futil {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 System.out.println("Entering file: " + file);
                 if (file.toString().endsWith(".txt")) {
-                    FileInputStream fileInputStream = new FileInputStream(file.toString());
-                    FileChannel fileInputChannel = fileInputStream.getChannel();
-                    ByteBuffer inputByteBuffer = ByteBuffer.allocate((int) fileInputChannel.size());
-                    fileInputChannel.read(inputByteBuffer);
-                    fileInputChannel.close();
-
-                    inputByteBuffer.flip();
-                    byte[] byteArray = new byte[inputByteBuffer.remaining()];
-                    inputByteBuffer.get(byteArray);
-
-                    FileOutputStream fileOutputStream = new FileOutputStream(file.toString());
-                    FileChannel fileOutputChannel = fileOutputStream.getChannel();
-                    ByteBuffer outputByteBuffer = ByteBuffer.wrap(byteArray);
-                    fileOutputChannel.write(outputByteBuffer);
-                    fileOutputChannel.close();
+                    byte[] byteArray = readFile(file.toString());
+                    writeToFile(resultFileName, byteArray);
                 }
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
-            public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-                System.out.println("File visiting failed: " + file);
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                System.out.println("File visit failed: " + file);
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
-            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                System.out.println("Exiting directory: " + dir);
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
                 return FileVisitResult.CONTINUE;
             }
         };
@@ -77,9 +51,47 @@ public class Futil {
             throw new RuntimeException(e);
         }
     }
+
+    private static byte[] readFile(String fileName) throws IOException {
+        try (FileInputStream fis = new FileInputStream(fileName)) {
+            FileChannel fc = fis.getChannel();
+            ByteBuffer byteBuffer = ByteBuffer.allocate((int) fc.size());
+            fc.read(byteBuffer);
+            fc.close();
+
+            byteBuffer.flip();
+            byte[] byteArray = new byte[byteBuffer.remaining()];
+            byteBuffer.get(byteArray);
+
+            // Convert from Cp1250 to UTF-8 encoding
+            byteArray = new String(byteArray, Charset.forName("windows-1250"))
+                    .getBytes(StandardCharsets.UTF_8);
+
+            return byteArray;
+        }
+    }
+
+    private static void writeToFile(String fileName, byte[] byteArray) throws IOException {
+        // StandardOpenOptions kept in a Set to add TRUNCATE_EXISTING option ONLY during the first writeToFile method invocation
+        Set<StandardOpenOption> StandardOpenOptions = new HashSet<>(Arrays.asList(
+                StandardOpenOption.WRITE,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND
+        ));
+        if (!existingFileTruncated) {
+            StandardOpenOptions.add(StandardOpenOption.TRUNCATE_EXISTING);
+            StandardOpenOptions.remove(StandardOpenOption.APPEND); // APPEND + TRUNCATE_EXISTING not allowed
+            existingFileTruncated = true;
+        }
+
+        try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOptions)) {
+            ByteBuffer byteBuffer = ByteBuffer.wrap(byteArray);
+            while (byteBuffer.hasRemaining()) {
+                fc.write(byteBuffer);
+            }
+        }
+    }
 }
 
 
 
-// NOTES
-// Files visited correctly, not sure if possible to read bytes only or have to convert, because no data is outputted to resultFile
