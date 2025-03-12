@@ -16,7 +16,7 @@ public class Futil {
     private static boolean existingFileTruncated = false;
 
     public static void processDir(String dirName, String resultFileName) {
-        FileVisitor<Path> fileVisitor = new FileVisitor<>() {
+        FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() {
 
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
