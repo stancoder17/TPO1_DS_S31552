@@ -2,6 +2,7 @@ package zad1;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -28,8 +29,8 @@ public class Futil {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 System.out.println("Entering file: " + file);
                 if (file.toString().endsWith(".txt")) {
-                    byte[] byteArray = readFile(file.toString());
-                    writeToFile(resultFileName, byteArray);
+                    CharBuffer charBuffer = readFile(file.toString());
+                    writeToFile(resultFileName, charBuffer);
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -52,25 +53,22 @@ public class Futil {
         }
     }
 
-    private static byte[] readFile(String fileName) throws IOException {
+    private static CharBuffer readFile(String fileName) throws IOException {
         try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.READ)) {
             ByteBuffer byteBuffer = ByteBuffer.allocate((int) fc.size());
             fc.read(byteBuffer);
             fc.close();
 
             byteBuffer.flip();
-            byte[] byteArray = new byte[byteBuffer.remaining()];
-            byteBuffer.get(byteArray);
-
-            // Convert from Cp1250 to UTF-8 encoding
-            byteArray = new String(byteArray, Charset.forName("windows-1250"))
-                    .getBytes(StandardCharsets.UTF_8);
-
-            return byteArray;
+            
+            // Decode from Cp1250
+            return Charset
+                    .forName("windows-1250")
+                    .decode(byteBuffer);
         }
     }
 
-    private static void writeToFile(String fileName, byte[] byteArray) throws IOException {
+    private static void writeToFile(String fileName, CharBuffer charBuffer) throws IOException {
         // StandardOpenOptions kept in a Set to add TRUNCATE_EXISTING option ONLY during the first writeToFile method invocation
         Set<StandardOpenOption> StandardOpenOptions = new HashSet<>(Arrays.asList(
                 StandardOpenOption.WRITE,
@@ -83,8 +81,10 @@ public class Futil {
             existingFileTruncated = true;
         }
 
+        Charset charset = StandardCharsets.UTF_8;
+        ByteBuffer byteBuffer = charset.encode(charBuffer);
+
         try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOptions)) {
-            ByteBuffer byteBuffer = ByteBuffer.wrap(byteArray);
             while (byteBuffer.hasRemaining()) {
                 fc.write(byteBuffer);
             }
