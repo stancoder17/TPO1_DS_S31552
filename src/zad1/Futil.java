@@ -53,8 +53,7 @@ public class Futil {
     }
 
     private static byte[] readFile(String fileName) throws IOException {
-        try (FileInputStream fis = new FileInputStream(fileName)) {
-            FileChannel fc = fis.getChannel();
+        try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.READ)) {
             ByteBuffer byteBuffer = ByteBuffer.allocate((int) fc.size());
             fc.read(byteBuffer);
             fc.close();
